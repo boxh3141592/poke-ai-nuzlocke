@@ -1,4 +1,4 @@
-# main.py (Versión Final - Soporte para Datos PBS/Custom)
+# main.py (Versión Definitiva - Soporte WikiDex + Tooltips + PBS)
 from fastapi import FastAPI, Request
 from google import genai
 from google.genai import types
@@ -90,20 +90,20 @@ async def update_roster(request: Request):
             )
         )
         
-        # Parseamos la respuesta
+        # Parseamos la respuesta de la IA
         latest_analysis = json.loads(response.text)
         
-        # 🟢 AÑADE ESTAS DOS LÍNEAS 🟢
-        # Guardamos los datos crudos (PBS) para que la web pueda mostrar los detalles al pasar el mouse
+        # --- PASO CRÍTICO: INYECTAR DATOS CRUDOS PARA EL FRONTEND ---
+        
+        # 1. Para Tooltips de Movimientos (Potencia/Precisión)
         if "party" in data:
-            latest_analysis["raw_party_data"] = data["party"] # 👈 ESTO ES LO IMPORTANTE
+            latest_analysis["raw_party_data"] = data["party"]
             
-        if "box" in data:
-            latest_analysis["box_data"] = data["box"]
+        # 2. Para Tooltips de Objetos (Descripción de mochila) - ¡NUEVO!
+        if "inventory" in data:
+            latest_analysis["inventory_data"] = data["inventory"]
             
-        print("✅ ¡Análisis completado con éxito!")
-
-        # Pequeño truco: Si la IA devuelve el PC en el JSON, lo guardamos para mostrarlo en la web
+        # 3. Para mostrar la Caja del PC
         if "box" in data:
             latest_analysis["box_data"] = data["box"]
             
