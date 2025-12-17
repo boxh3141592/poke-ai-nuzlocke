@@ -1,4 +1,4 @@
-# main.py (Versión actualizada para google-genai V2)
+# main.py (Versión Final - Soporte para Datos PBS/Custom)
 from fastapi import FastAPI, Request
 from google import genai
 from google.genai import types
@@ -36,48 +36,53 @@ async def update_roster(request: Request):
     except Exception:
         return {"status": "error", "message": "JSON inválido recibido"}
 
-    # 2. Preparar el Prompt
+    # 2. Preparar el Prompt (ACTUALIZADO PARA DATOS TÉCNICOS/PBS)
     prompt = f"""
-    Actúa como el mejor coach competitivo de Pokémon del mundo.
-    Estoy jugando un Randomlocke/Nuzlocke difícil.
+    Eres un experto en mecánica de Pokémon, especializado en Nuzlockes de alta dificultad y Fan-Games.
     
-    ESTOS SON MIS RECURSOS:
-    1. MI EQUIPO ACTUAL (Party): {data.get('party')}
-    2. MI INVENTARIO DE OBJETOS: {data.get('inventory')}
-    3. POKÉMON EN EL PC (Reserva): {data.get('box')}
+    HE EXTRAÍDO LOS DATOS INTERNOS (PBS) DEL JUEGO. 
+    **NO ASUMAS NADA POR EL NOMBRE.** Usa los DATOS TÉCNICOS que te envío en el JSON.
+
+    1. MI EQUIPO (Party): {data.get('party')}
+       * Nota: Cada movimiento en 'move_pool' incluye ahora su Tipo, Potencia, Precisión y Descripción exacta del juego.
+       * Las habilidades y objetos equipados también incluyen su descripción técnica.
+    
+    2. INVENTARIO DE OBJETOS: {data.get('inventory')}
+       * Solo objetos útiles para batalla con sus descripciones.
+
+    3. RESERVA (PC): {data.get('box')}
 
     TU MISIÓN:
-    Analiza mi equipo actual para crear la estrategia perfecta.
+    Diseña la estrategia perfecta basándote en la matemática de los datos enviados (Potencia, Efectos secundarios, Cobertura).
     
     REGLAS OBLIGATORIAS:
-    - **MOVIMIENTOS:** Para cada Pokémon, elige los 4 mejores movimientos ÚNICAMENTE de su lista 'move_pool'. NO inventes movimientos que no estén ahí. La lista 'move_pool' ya incluye lo que pueden recordar y las MTs que tengo en la mochila.
-    - **OBJETOS:** Asigna a cada Pokémon el mejor objeto posible que esté en mi lista 'INVENTARIO DE OBJETOS'. Si no tengo nada bueno, di "Sin objeto útil".
-    - **ROL:** Define el rol (Sweeper, Wall, Support).
-    - **PC:** Si ves un Pokémon en la CAJA (PC) que sea mucho mejor que uno de mi equipo para equilibrar tipos, sugiérelo en el consejo final.
+    - **DATOS REALES vs CONOCIMIENTO:** Si un movimiento se llama "Golpe Añil" y no lo conoces, ¡LEE SU FICHA! Si dice "Potencia: 100, Tipo: Fuego", úsalo como tal. Lo que yo te envío tiene prioridad sobre tu conocimiento base.
+    - **MOVIMIENTOS:** Elige los 4 mejores del 'move_pool' disponible. Prioriza STAB y Cobertura de tipos.
+    - **OBJETOS:** Asigna objetos del inventario que sinergicen con la habilidad o los stats del Pokémon (lee las descripciones).
+    - **ROLES:** Define si es Atacante Físico, Especial, Muralla, etc., basándote en sus Stats base.
 
-    FORMATO DE RESPUESTA JSON:
+    FORMATO DE RESPUESTA JSON (Exacto para el Frontend):
     {{
-      "analysis_summary": "Tu consejo general. Menciona si debo cambiar a alguien del equipo por alguien del PC y qué objetos equipar.",
+      "analysis_summary": "Tu consejo general estratégico. Menciona cambios clave del PC o usos de objetos.",
       "team": [
         {{
           "species": "Nombre",
-          "role": "Rol",
-          "item_suggestion": "Objeto de mi inventario",
-          "moves": ["Mov1", "Mov2", "Mov3", "Mov4"],
-          "ability": "Habilidad",
-          "reason": "Breve explicación de por qué este set con estos recursos."
+          "role": "Rol (ej: Sweeper Físico)",
+          "item_suggestion": "Nombre del objeto a equipar (del inventario)",
+          "moves": ["NombreMov1", "NombreMov2", "NombreMov3", "NombreMov4"],
+          "ability": "Nombre Habilidad",
+          "reason": "Explica la estrategia basándote en la potencia/efecto de los movimientos elegidos."
         }}
         ... (para los 6 pokémon)
       ]
     }}
     """
 
-    print("🧠 Enviando datos a Gemini (Nueva Librería)...")
+    print("🧠 Enviando datos técnicos a Gemini...")
     
     try:
-        # 3. Invocar a la API (Sintaxis V2)
+        # 3. Invocar a la API (Modelo Flash Latest)
         response = client.models.generate_content(
-            # Usamos el alias que APARECE en tu captura
             model='gemini-flash-latest',
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -87,6 +92,11 @@ async def update_roster(request: Request):
         
         # Parseamos la respuesta
         latest_analysis = json.loads(response.text)
+        
+        # Pequeño truco: Si la IA devuelve el PC en el JSON, lo guardamos para mostrarlo en la web
+        if "box" in data:
+            latest_analysis["box_data"] = data["box"]
+            
         print("✅ ¡Análisis completado con éxito!")
         
     except Exception as e:
