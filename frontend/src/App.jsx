@@ -10,13 +10,13 @@ const styles = {
   
   // Nombres y Elementos interactivos (WikiDex)
   clickable: { cursor: 'pointer', transition: 'color 0.2s', textDecoration: 'underline', textDecorationColor: 'rgba(255,255,255,0.2)' },
-  pokeName: { color: '#60a5fa', margin: '0 0 5px 0', fontSize: '1.4rem', textTransform: 'capitalize', cursor: 'pointer' },
+  pokeName: { color: '#60a5fa', margin: '0', fontSize: '1.4rem', textTransform: 'capitalize', cursor: 'pointer' }, // Margen ajustado para flex
   
   roleTag: { backgroundColor: '#374151', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', color: '#9ca3af', display: 'inline-block', marginBottom:'10px' },
   moveList: { listStyle: 'none', padding: 0, marginTop: '10px' },
   
   // Items y Movimientos
-  itemText: { color: '#e0e0e0', position: 'relative', cursor: 'help' }, // Cursor de ayuda para el tooltip
+  itemText: { color: '#e0e0e0', position: 'relative', cursor: 'help' }, 
   moveItem: { 
     color: '#34d399', borderBottom: '1px solid #444', padding: '8px 5px', fontSize: '1rem', 
     cursor: 'pointer', position: 'relative', display: 'flex', justifyContent: 'space-between' 
@@ -37,7 +37,7 @@ const styles = {
 
 function App() {
   const [data, setData] = useState(null);
-  const [hoveredData, setHoveredData] = useState(null); // { type: 'move'|'item', pIndex, mIndex, content }
+  const [hoveredData, setHoveredData] = useState(null); 
 
   useEffect(() => {
     const fetchData = async () => {
@@ -52,10 +52,16 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
+  // --- FUNCIÓN PARA OBTENER URL DEL ICONO ---
+  const getIconUrl = (fileName) => {
+    if (!fileName) return null;
+    // Asume que las imágenes están en public/pokemon-icons/NOMBRE.png
+    return `/pokemon-icons/${fileName}.png`; 
+  };
+
   // --- ABRIR WIKIDEX ---
   const openWiki = (term) => {
     if (!term || term === 'Nada' || term === 'Sin objeto útil') return;
-    // Reemplaza espacios por guiones bajos y limpia un poco el string
     const cleanTerm = term.split(':')[0].trim().replace(/ /g, '_'); 
     window.open(`https://www.wikidex.net/wiki/${cleanTerm}`, '_blank');
   };
@@ -69,10 +75,8 @@ function App() {
 
   const getItemDescription = (itemName) => {
     if (!data?.inventory_data || !itemName) return "Descripción no disponible en mochila.";
-    // El inventario viene como ["Poción: Cura 20HP", ...]. Buscamos la coincidencia.
     const found = data.inventory_data.find(i => i.toLowerCase().startsWith(itemName.toLowerCase()));
     if (found) {
-        // Devolvemos solo la descripción (lo que está después de los dos puntos)
         return found.includes(':') ? found.split(':').slice(1).join(':').trim() : found;
     }
     return "Objeto no encontrado en inventario.";
@@ -94,19 +98,31 @@ function App() {
       <div style={styles.grid}>
         {data.team?.map((pkmn, pIndex) => (
           <div key={pIndex} style={styles.card}>
-            {/* NOMBRE POKEMON (CLICKABLE) */}
-            <h2 
-              style={{...styles.pokeName, ...styles.clickable}} 
-              onClick={() => openWiki(pkmn.species)}
-              title="Ver en WikiDex"
-            >
-              {pkmn.species} 🔗
-            </h2>
             
+            {/* --- CABECERA (ICONO + NOMBRE) --- */}
+            <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px'}}>
+               {/* 🖼️ ICONO DEL POKEMON */}
+               <img 
+                 src={getIconUrl(pkmn.icon_file)} 
+                 alt={pkmn.species} 
+                 style={{width: '64px', height: '64px', imageRendering: 'pixelated'}} 
+                 onError={(e) => { e.target.style.display = 'none'; }} // Si falla, se oculta
+               />
+               
+               {/* NOMBRE (CLICKABLE) */}
+               <h2 
+                 style={{...styles.pokeName, ...styles.clickable}} 
+                 onClick={() => openWiki(pkmn.species)}
+                 title="Ver en WikiDex"
+               >
+                 {pkmn.species} 🔗
+               </h2>
+            </div>
+
             <span style={styles.roleTag}>{pkmn.role}</span>
             
             {/* OBJETO (HOVER + CLICKABLE) */}
-            <div style={{marginTop: '10px'}}>
+            <div style={{marginTop: '5px'}}>
                 <strong>Item: </strong>
                 <span 
                     style={{...styles.itemText, ...styles.clickable, color: '#fbbf24'}}
