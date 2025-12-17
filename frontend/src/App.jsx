@@ -26,7 +26,7 @@ function App() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await axios.get('http://127.0.0.1:8000/get-analysis');
+        const res = await axios.get('https://poke-ai-nuzlocke.onrender.com/get-analysis');
         if (res.data && res.data.analysis_summary) setData(res.data);
       } catch (e) { console.log("Esperando..."); }
     };
