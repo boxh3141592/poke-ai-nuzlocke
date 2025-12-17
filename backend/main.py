@@ -93,6 +93,16 @@ async def update_roster(request: Request):
         # Parseamos la respuesta
         latest_analysis = json.loads(response.text)
         
+        # 🟢 AÑADE ESTAS DOS LÍNEAS 🟢
+        # Guardamos los datos crudos (PBS) para que la web pueda mostrar los detalles al pasar el mouse
+        if "party" in data:
+            latest_analysis["raw_party_data"] = data["party"] # 👈 ESTO ES LO IMPORTANTE
+            
+        if "box" in data:
+            latest_analysis["box_data"] = data["box"]
+            
+        print("✅ ¡Análisis completado con éxito!")
+
         # Pequeño truco: Si la IA devuelve el PC en el JSON, lo guardamos para mostrarlo en la web
         if "box" in data:
             latest_analysis["box_data"] = data["box"]
