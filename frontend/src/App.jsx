@@ -11,10 +11,21 @@ const typeColors = {
 };
 
 const styles = {
-  container: { backgroundColor: '#121212', color: '#e0e0e0', minHeight: '100vh', padding: '20px', fontFamily: 'Segoe UI, sans-serif' },
+  // --- CAMBIO AQUÍ: Estilos del contenedor principal ---
+  container: { 
+      backgroundColor: '#121212', 
+      color: '#e0e0e0', 
+      minHeight: '100vh', 
+      width: '100%',           // Forzar ancho completo
+      boxSizing: 'border-box', // Para que el padding no rompa el ancho
+      padding: '20px', 
+      margin: 0,               // Quitar márgenes externos
+      fontFamily: 'Segoe UI, sans-serif' 
+  },
   header: { textAlign: 'center', color: '#fbbf24', fontSize: '2rem', marginBottom: '20px' },
   summaryBox: { backgroundColor: '#1e1e1e', padding: '20px', borderRadius: '10px', marginBottom: '20px', borderLeft: '5px solid #fbbf24' },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' },
+  // Grid responsivo: Se adapta al ancho disponible
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', width: '100%' },
   card: { backgroundColor: '#2d2d2d', padding: '15px', borderRadius: '15px', border: '1px solid #333', position: 'relative' },
   clickable: { cursor: 'pointer', transition: 'color 0.2s', textDecoration: 'underline', textDecorationColor: 'rgba(255,255,255,0.2)' },
   pokeName: { color: '#60a5fa', margin: '0', fontSize: '1.4rem', textTransform: 'capitalize', cursor: 'pointer' },
@@ -49,29 +60,21 @@ function App() {
       try {
         const res = await axios.get(`https://poke-ai-nuzlocke.onrender.com/get-analysis?id=${sessionId}`);
         
-        // --- AQUÍ ESTÁ LA CORRECCIÓN DE LA LÓGICA ---
         if (res.data.status === 'thinking') {
-            // Si está pensando, avisamos
             setStatusMsg("🧠 La IA está pensando...");
         } 
         else if (res.data.analysis_summary) {
-            // Si hay datos nuevos, actualizamos todo
             setData(res.data);
         } 
         else if (res.data.error) {
-            // Si hay error, avisamos
             setStatusMsg(`❌ Error: ${res.data.error}`);
         } 
         else {
-            // Si el servidor dice "waiting" (status waiting)...
-            // SOLO mostramos "Esperando..." si NO tenemos datos en pantalla.
-            // Si ya tenemos datos, IGNORAMOS el waiting para que no se borre la pantalla.
             if (!data) {
                 setStatusMsg("⏳ Esperando datos del juego...");
             }
         }
       } catch (e) { 
-          // Si falla la conexión, no borramos los datos si ya los tenemos
           if (!data) setStatusMsg("Esperando conexión...");
       }
     };
@@ -79,7 +82,7 @@ function App() {
     fetchData();
     const interval = setInterval(fetchData, 3000);
     return () => clearInterval(interval);
-  }, [data]); // Añadimos 'data' como dependencia para que sepa cuándo ya tiene info
+  }, [data]);
 
   const getGifUrl = (species) => `https://play.pokemonshowdown.com/sprites/xyani/${species?.toLowerCase().replace(/[^a-z0-9]/g, '')}.gif`;
   const openWiki = (term) => term && window.open(`https://www.wikidex.net/wiki/${term.split(':')[0].trim().replace(/ /g, '_')}`, '_blank');
@@ -98,7 +101,6 @@ function App() {
     return "Descripción detallada no disponible para sugerencias de caja.";
   };
 
-  // Solo mostramos el mensaje de carga si NO hay datos
   if (!data) return <div style={{...styles.container, textAlign:'center', display:'flex', flexDirection:'column', justifyContent:'center', alignItems:'center'}}><h1 style={{color: '#fbbf24'}}>🎮 GeminiLink</h1><h3>{statusMsg}</h3></div>;
 
   return (
