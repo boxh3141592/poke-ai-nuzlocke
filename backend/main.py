@@ -32,7 +32,7 @@ def list_models():
     except Exception as e:
         return {"error": str(e)}
 
-# --- LÓGICA DE IA (CEREBRO MEJORADO) ---
+# --- LÓGICA DE IA ---
 def process_strategy_in_background(session_id: str, data: dict):
     global sessions_db
     print(f"🧠 Procesando sesión con Groq: {session_id}")
@@ -54,24 +54,27 @@ def process_strategy_in_background(session_id: str, data: dict):
         }
         return
 
-    # --- PROMPT MILITAR PARA RELLENAR EQUIPO ---
     prompt = f"""
-    Eres un experto en Nuzlocke. TU MISIÓN ES CONSTRUIR UN EQUIPO COMPLETO DE 6 POKÉMON.
+    Eres un experto en Nuzlocke.
     
-    REGLAS DE ORO (IMPORTANTE):
-    1.  **ANÁLISIS DE CANTIDAD:** Cuenta cuántos Pokémon hay en el "EQUIPO ACTUAL".
-    2.  **RELLENO OBLIGATORIO:** Si hay MENOS de 6 Pokémon en el equipo actual, ESTÁS OBLIGADO a buscar en la "CAJA" los mejores candidatos para rellenar los huecos hasta llegar a 6.
-    3.  **PRIORIDAD:** Mantén a los del equipo actual (a menos que sean terribles), y completa el resto con la caja.
-    4.  **MOVE POOL:** Usa el campo "move_pool" para sugerir ataques óptimos (incluyendo MTs y recordar movimientos).
+    MISIÓN:
+    Construye el MEJOR equipo de 6 Pokémon usando lo que tengo en el equipo y en la caja.
+    
+    REGLAS ESTRICTAS PARA MOVIMIENTOS:
+    1. Tanto para los Pokémon del equipo como para los que saques de la CAJA:
+       REVISA SIEMPRE EL CAMPO "move_pool".
+    2. El "move_pool" contiene ataques que saben, que pueden recordar y MTs compatibles.
+    3. ¡NO DEJES POKÉMON SIN ATAQUES! Selecciona siempre 4 ataques del pool.
+    4. Si un Pokémon viene de la caja, ármalo desde cero con los mejores ataques del pool.
 
     DATOS:
-    EQUIPO ACTUAL ({len(party)} Pokémon): {json.dumps(party)}
-    CAJA DE PC ({len(box)} Pokémon): {json.dumps(box)}
+    EQUIPO ACTUAL ({len(party)}): {json.dumps(party)}
+    CAJA PC ({len(box)}): {json.dumps(box)}
     INVENTARIO: {inventory}
 
     FORMATO DE RESPUESTA (JSON PURO):
     {{
-      "analysis_summary": "He mantenido tus {len(party)} Pokémon y he añadido X de la caja para completar el equipo...",
+      "analysis_summary": "Resumen de cambios (ej: 'Saqué a Gible de la caja y le enseñé Terremoto usando tu MT')...",
       "team": [ 
         {{ 
            "species": "Nombre", 
@@ -79,18 +82,18 @@ def process_strategy_in_background(session_id: str, data: dict):
            "ability": "Habilidad", 
            "item_suggestion": "Objeto", 
            "moves": ["M1", "M2", "M3", "M4"], 
-           "reason": "Explicación (Si vino de la caja, dilo aquí)." 
+           "reason": "Razón estratégica." 
         }} 
       ]
     }}
     """
-    # (El resto de la llamada a la API sigue igual...)
+
     try:
         chat_completion = client.chat.completions.create(
             messages=[
                 {
                     "role": "system",
-                    "content": "Eres un asistente que solo responde en JSON válido y siempre completa equipos de 6."
+                    "content": "Eres un asistente que solo responde en JSON válido."
                 },
                 {
                     "role": "user",
@@ -105,7 +108,11 @@ def process_strategy_in_background(session_id: str, data: dict):
         response_content = chat_completion.choices[0].message.content
         new_analysis = json.loads(response_content)
         
-        new_analysis["raw_party_data"] = party
+        # --- CAMBIO CRÍTICO AQUÍ ---
+        # Unimos Party + Box para que el Frontend tenga TODAS las definiciones de ataques/stats
+        # Así, si entra uno de la caja, la web sabrá mostrar sus detalles.
+        new_analysis["raw_party_data"] = party + box 
+        
         new_analysis["inventory_data"] = inventory
         
         sessions_db[session_id] = new_analysis
