@@ -8,21 +8,20 @@ const styles = {
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' },
   card: { backgroundColor: '#2d2d2d', padding: '15px', borderRadius: '15px', border: '1px solid #333', position: 'relative' },
   
-  // Nombres y Elementos interactivos (WikiDex)
+  // Estilos interactivos
   clickable: { cursor: 'pointer', transition: 'color 0.2s', textDecoration: 'underline', textDecorationColor: 'rgba(255,255,255,0.2)' },
-  pokeName: { color: '#60a5fa', margin: '0', fontSize: '1.4rem', textTransform: 'capitalize', cursor: 'pointer' }, // Margen ajustado para flex
+  pokeName: { color: '#60a5fa', margin: '0', fontSize: '1.4rem', textTransform: 'capitalize', cursor: 'pointer' },
   
   roleTag: { backgroundColor: '#374151', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', color: '#9ca3af', display: 'inline-block', marginBottom:'10px' },
   moveList: { listStyle: 'none', padding: 0, marginTop: '10px' },
   
-  // Items y Movimientos
   itemText: { color: '#e0e0e0', position: 'relative', cursor: 'help' }, 
   moveItem: { 
     color: '#34d399', borderBottom: '1px solid #444', padding: '8px 5px', fontSize: '1rem', 
     cursor: 'pointer', position: 'relative', display: 'flex', justifyContent: 'space-between' 
   },
 
-  // --- TOOLTIP FLOTANTE ---
+  // Tooltip Flotante
   tooltip: {
     position: 'absolute', bottom: '110%', left: '50%', transform: 'translateX(-50%)',
     backgroundColor: '#1f2937', border: '2px solid #fbbf24', borderRadius: '8px', padding: '10px',
@@ -42,7 +41,7 @@ function App() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // CAMBIA ESTO POR TU URL DE RENDER
+        // CAMBIA ESTO POR TU URL DE RENDER SI ES NECESARIO
         const res = await axios.get('https://poke-ai-nuzlocke.onrender.com/get-analysis');
         if (res.data && res.data.analysis_summary) setData(res.data);
       } catch (e) { console.log("Esperando datos..."); }
@@ -53,20 +52,18 @@ function App() {
   }, []);
 
   // --- FUNCIÓN PARA OBTENER URL DEL ICONO ---
+  // Recibe "ABRA" o "ABOMASNOW_1" y devuelve la ruta al archivo PNG
   const getIconUrl = (fileName) => {
     if (!fileName) return null;
-    // Asume que las imágenes están en public/pokemon-icons/NOMBRE.png
     return `/pokemon-icons/${fileName}.png`; 
   };
 
-  // --- ABRIR WIKIDEX ---
   const openWiki = (term) => {
     if (!term || term === 'Nada' || term === 'Sin objeto útil') return;
     const cleanTerm = term.split(':')[0].trim().replace(/ /g, '_'); 
     window.open(`https://www.wikidex.net/wiki/${cleanTerm}`, '_blank');
   };
 
-  // --- BUSCAR DATOS (Movimientos y Objetos) ---
   const getMoveDetails = (pokemonName, moveName) => {
     if (!data?.raw_party_data) return null;
     const rawPokemon = data.raw_party_data.find(p => p.species === pokemonName);
@@ -101,12 +98,15 @@ function App() {
             
             {/* --- CABECERA (ICONO + NOMBRE) --- */}
             <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px'}}>
-               {/* 🖼️ ICONO DEL POKEMON */}
+               {/* 🖼️ ICONO DEL POKEMON 🖼️ */}
                <img 
                  src={getIconUrl(pkmn.icon_file)} 
                  alt={pkmn.species} 
                  style={{width: '64px', height: '64px', imageRendering: 'pixelated'}} 
-                 onError={(e) => { e.target.style.display = 'none'; }} // Si falla, se oculta
+                 onError={(e) => { 
+                    // Si la imagen falla, la ocultamos para no romper el diseño
+                    e.target.style.display = 'none'; 
+                 }}
                />
                
                {/* NOMBRE (CLICKABLE) */}
@@ -132,7 +132,6 @@ function App() {
                 >
                     {pkmn.item_suggestion}
                     
-                    {/* TOOLTIP DEL OBJETO */}
                     {hoveredData?.type === 'item' && hoveredData.pIndex === pIndex && (
                         <div style={styles.tooltip}>
                             <strong>ℹ️ Descripción:</strong>
@@ -160,7 +159,6 @@ function App() {
                     <span>⚔️ {moveName}</span>
                     <span style={{fontSize:'0.8em', color:'#666'}}>🔗</span>
 
-                    {/* TOOLTIP DEL MOVIMIENTO */}
                     {isHovered && details && (
                       <div style={styles.tooltip}>
                         <div style={styles.tooltipHeader}>
