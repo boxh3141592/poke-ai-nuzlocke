@@ -8,14 +8,13 @@ const styles = {
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' },
   card: { backgroundColor: '#2d2d2d', padding: '15px', borderRadius: '15px', border: '1px solid #333', position: 'relative' },
   
-  // Nombres y Elementos interactivos (WikiDex)
+  // Estilos interactivos
   clickable: { cursor: 'pointer', transition: 'color 0.2s', textDecoration: 'underline', textDecorationColor: 'rgba(255,255,255,0.2)' },
   pokeName: { color: '#60a5fa', margin: '0', fontSize: '1.4rem', textTransform: 'capitalize', cursor: 'pointer' },
   
   roleTag: { backgroundColor: '#374151', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', color: '#9ca3af', display: 'inline-block', marginBottom:'10px' },
   moveList: { listStyle: 'none', padding: 0, marginTop: '10px' },
   
-  // Items y Movimientos
   itemText: { color: '#e0e0e0', position: 'relative', cursor: 'help' }, 
   moveItem: { 
     color: '#34d399', borderBottom: '1px solid #444', padding: '8px 5px', fontSize: '1rem', 
@@ -42,7 +41,7 @@ function App() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // CAMBIA ESTO POR TU URL DE RENDER SI ES NECESARIO
+        // URL DE RENDER
         const res = await axios.get('https://poke-ai-nuzlocke.onrender.com/get-analysis');
         if (res.data && res.data.analysis_summary) setData(res.data);
       } catch (e) { console.log("Esperando datos..."); }
@@ -52,10 +51,10 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // --- FUNCIÓN PARA OBTENER URL DEL ICONO (CORREGIDA) ---
+  // --- FUNCIÓN PARA OBTENER URL DEL ICONO ---
   const getIconUrl = (fileName) => {
     if (!fileName) return null;
-    // Forzamos MAYÚSCULAS para que coincida con tus archivos (ej: "ARON.png")
+    // Forzamos MAYÚSCULAS para que coincida con tus archivos (ej: "QUILAVA.png")
     const cleanName = String(fileName).toUpperCase();
     return `/pokemon-icons/${cleanName}.png`; 
   };
@@ -100,16 +99,28 @@ function App() {
             
             {/* --- CABECERA (ICONO + NOMBRE) --- */}
             <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px'}}>
-               {/* 🖼️ ICONO DEL POKEMON (MODO DEBUG) 🖼️ */}
-               <img
+               
+               {/* 🖼️ ICONO CON SISTEMA DE RESPALDO (SMART FALLBACK) 🖼️ */}
+               <img 
                  src={getIconUrl(pkmn.icon_file)} 
                  alt={pkmn.species} 
                  style={{width: '64px', height: '64px', imageRendering: 'pixelated'}} 
                  onError={(e) => { 
-                    // EN VEZ DE OCULTARLA, LA RESALTAMOS EN ROJO
-                    e.target.style.border = '2px solid red';
-                    // Y mostramos en la consola qué ruta falló
-                    console.log("❌ Falló al cargar:", e.target.src);
+                    // Si falla la carga (ej: no existe QUILAVA_1.png), entra aquí.
+                    
+                    // 1. Calculamos el nombre base usando la Especie (ej: QUILAVA)
+                    const baseName = String(pkmn.species).toUpperCase();
+                    const backupUrl = `/pokemon-icons/${baseName}.png`;
+                    
+                    // 2. Verificamos para no entrar en bucle infinito
+                    // Si la imagen que falló NO es la de respaldo, intentamos cargar el respaldo.
+                    if (!e.target.src.toUpperCase().endsWith(backupUrl.toUpperCase())) {
+                        console.log(`⚠️ Icono exacto no encontrado para ${pkmn.species}, probando base: ${baseName}`);
+                        e.target.src = backupUrl; 
+                    } else {
+                        // 3. Si el respaldo también falla, ocultamos la imagen
+                        e.target.style.display = 'none';
+                    }
                  }}
                />
                
