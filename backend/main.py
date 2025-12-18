@@ -11,6 +11,7 @@ client = genai.Client(api_key=api_key)
 
 app = FastAPI()
 
+# Configuración de CORS para permitir conexiones desde cualquier lugar
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,53 +19,74 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Base de datos en memoria (ID -> Datos)
+# --- BASE DE DATOS EN MEMORIA (DICCIONARIO DE SESIONES) ---
+# Antes era 'latest_analysis', ahora guardamos por ID:
+# { "123456": {datos_usuario_A}, "987654": {datos_usuario_B} }
 sessions_db = {} 
 
 # --- ENDPOINT ANTI-SUEÑO (KEEP ALIVE) ---
+# UptimeRobot visitará esto cada 10 min para que Render no se duerma
 @app.get("/")
 def keep_alive():
     return {"status": "online", "message": "GeminiLink backend is running!"}
 
-# --- LÓGICA DE IA ---
+# --- LÓGICA DE IA EN SEGUNDO PLANO ---
 def process_strategy_in_background(session_id: str, data: dict):
     global sessions_db
     print(f"🧠 Procesando sesión: {session_id}")
     
+    # 1. Marcamos estado: Pensando
     sessions_db[session_id] = {"status": "thinking"}
 
+    # 2. Extraemos los datos
     party = data.get('party', [])
     box = data.get('box', [])
     inventory = data.get('inventory', [])
     
-    # Verificación de seguridad
+    # 3. Verificación de Seguridad: ¿Hay datos reales?
     if not party and not box:
         sessions_db[session_id] = {
-            "analysis_summary": "⚠️ No se encontraron Pokémon. Asegúrate de tener al menos uno en el equipo o PC.",
+            "analysis_summary": "⚠️ No se detectaron Pokémon en el equipo ni en la caja. Asegúrate de tener al menos un Pokémon capturado.",
             "team": []
         }
-        print("⚠️ Datos vacíos recibidos.")
+        print(f"⚠️ Datos vacíos recibidos para sesión {session_id}.")
         return
 
+    # 4. Prompt para Gemini
     prompt = f"""
-    Eres un experto en mecánica de Pokémon.
-    EQUIPO: {party}
-    INVENTARIO: {inventory}
-    CAJA: {box}
+    Eres un experto en mecánica de Pokémon (Nuzlockes/Fan-Games).
+    
+    CONTEXTO DEL JUGADOR:
+    - EQUIPO ACTUAL: {party}
+    - INVENTARIO: {inventory}
+    - CAJA (PC): {box}
 
-    Diseña la mejor estrategia posible.
-    Responde SOLO en JSON con este formato:
+    TU MISIÓN:
+    Diseña la mejor estrategia posible con estos recursos.
+    
+    REGLAS:
+    - Usa los datos técnicos (Potencia, Precisión) que te doy en el JSON.
+    - Si el equipo es débil, sugiere cambios usando Pokémon de la CAJA.
+    - Asigna objetos del INVENTARIO si son útiles.
+
+    FORMATO DE RESPUESTA (JSON PURO):
     {{
-      "analysis_summary": "Consejo breve...",
+      "analysis_summary": "Consejo general estratégico y breve...",
       "team": [ 
-        {{ "species": "Nombre", "role": "Rol", "item_suggestion": "Objeto", "moves": ["M1", "M2", "M3", "M4"], "reason": "Razón" }} 
+        {{ 
+            "species": "Nombre", 
+            "role": "Atacante Físico/Tanque/Support/etc", 
+            "item_suggestion": "Objeto o 'Nada'", 
+            "moves": ["Mov1", "Mov2", "Mov3", "Mov4"], 
+            "reason": "Por qué esta configuración es buena" 
+        }} 
       ]
     }}
     """
 
     try:
-        # --- CORRECCIÓN CRÍTICA AQUÍ ---
-        # Usamos la versión específica '-001' que es más estable y evita el error 404
+        # --- CORRECCIÓN DE MODELO ---
+        # Usamos 'gemini-1.5-flash-001' para evitar errores 404
         response = client.models.generate_content(
             model='gemini-1.5-flash-001',
             contents=prompt,
@@ -73,33 +95,45 @@ def process_strategy_in_background(session_id: str, data: dict):
         
         new_analysis = json.loads(response.text)
         
-        # Inyectar datos para el frontend
+        # 5. Inyectamos los datos originales (para Iconos y Tooltips en el Frontend)
         new_analysis["raw_party_data"] = party
         new_analysis["inventory_data"] = inventory
         
+        # 6. Guardamos en el diccionario usando el ID DE SESIÓN
         sessions_db[session_id] = new_analysis
-        print(f"✅ Estrategia generada con éxito para ID: {session_id}")
+        print(f"✅ Estrategia guardada para ID: {session_id}")
         
     except Exception as e:
-        print(f"❌ Error CRÍTICO IA: {e}")
+        print(f"❌ Error IA en sesión {session_id}: {e}")
         sessions_db[session_id] = {"error": f"Error de IA: {str(e)}"}
 
-# --- ENDPOINTS API ---
+# --- ENDPOINT 1: RECIBIR DATOS (Desde RPG Maker) ---
 @app.post("/update-roster")
 async def update_roster(request: Request, background_tasks: BackgroundTasks):
     try:
         payload = await request.json()
+        
+        # Leemos el ID que nos manda el juego
         session_id = payload.get("session_id")
         team_data = payload.get("team")
         
-        if not session_id: return {"status": "error", "message": "No ID"}
+        if not session_id:
+            return {"status": "error", "message": "Falta el session_id"}
 
+        # Lanzamos la tarea a segundo plano pasando el ID
         background_tasks.add_task(process_strategy_in_background, session_id, team_data)
+        
         return {"status": "queued", "id": session_id}
+        
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+# --- ENDPOINT 2: ENTREGAR DATOS (Hacia la Web) ---
+# Ahora requiere ?id=XXXXXX
 @app.get("/get-analysis")
 async def get_analysis(id: str = None):
-    if not id: return {"error": "Falta ID"}
+    if not id:
+        return {"error": "Falta el ID de sesión"}
+    
+    # Buscamos en el diccionario. Si no existe, devolvemos 'waiting'
     return sessions_db.get(id, {"status": "waiting"})
