@@ -32,15 +32,13 @@ def list_models():
     except Exception as e:
         return {"error": str(e)}
 
-# --- LÓGICA DE IA ---
+# --- LÓGICA DE IA (CEREBRO MEJORADO) ---
 def process_strategy_in_background(session_id: str, data: dict):
     global sessions_db
     print(f"🧠 Procesando sesión con Groq: {session_id}")
     
-    # --- PROTECCIÓN CONTRA EL ERROR DE NONETYPE ---
     if not data:
-        print("❌ Error: Se recibieron datos vacíos en process_strategy_in_background")
-        sessions_db[session_id] = {"error": "Error interno: Datos vacíos recibidos del juego."}
+        sessions_db[session_id] = {"error": "Error: Datos vacíos."}
         return
 
     sessions_db[session_id] = {"status": "thinking"}
@@ -51,34 +49,29 @@ def process_strategy_in_background(session_id: str, data: dict):
     
     if not party and not box:
         sessions_db[session_id] = {
-            "analysis_summary": "⚠️ No se encontraron datos de Pokémon.",
+            "analysis_summary": "⚠️ No se encontraron Pokémon ni en equipo ni en caja.",
             "team": []
         }
         return
 
+    # --- PROMPT MILITAR PARA RELLENAR EQUIPO ---
     prompt = f"""
-    Eres el mejor entrenador Pokémon del mundo, experto en retos Nuzlocke.
+    Eres un experto en Nuzlocke. TU MISIÓN ES CONSTRUIR UN EQUIPO COMPLETO DE 6 POKÉMON.
     
-    OBJETIVO:
-    Analiza mi equipo y construye la mejor estrategia de 6 Pokémon para sobrevivir.
-    
-    INFORMACIÓN CLAVE:
-    1. Recibirás una lista de Pokémon en "party".
-    2. Cada Pokémon tiene un campo "move_pool" con TODOS sus ataques posibles (actuales + recordables + MTs mochila).
-    
-    INSTRUCCIONES OBLIGATORIAS:
-    - NO te limites a los ataques actuales.
-    - REVISA el "move_pool". Si ves un ataque mejor ahí, ¡Sugiérelo!
-    - Explica en "reason" si cambiaste ataques usando el pool (ej: "Enseña Rayo Hielo usando MT").
+    REGLAS DE ORO (IMPORTANTE):
+    1.  **ANÁLISIS DE CANTIDAD:** Cuenta cuántos Pokémon hay en el "EQUIPO ACTUAL".
+    2.  **RELLENO OBLIGATORIO:** Si hay MENOS de 6 Pokémon en el equipo actual, ESTÁS OBLIGADO a buscar en la "CAJA" los mejores candidatos para rellenar los huecos hasta llegar a 6.
+    3.  **PRIORIDAD:** Mantén a los del equipo actual (a menos que sean terribles), y completa el resto con la caja.
+    4.  **MOVE POOL:** Usa el campo "move_pool" para sugerir ataques óptimos (incluyendo MTs y recordar movimientos).
 
-    DATOS DEL JUEGO:
-    EQUIPO ACTUAL: {json.dumps(party)}
+    DATOS:
+    EQUIPO ACTUAL ({len(party)} Pokémon): {json.dumps(party)}
+    CAJA DE PC ({len(box)} Pokémon): {json.dumps(box)}
     INVENTARIO: {inventory}
-    CAJA: {box}
 
-    FORMATO JSON OBLIGATORIO:
+    FORMATO DE RESPUESTA (JSON PURO):
     {{
-      "analysis_summary": "Resumen estratégico...",
+      "analysis_summary": "He mantenido tus {len(party)} Pokémon y he añadido X de la caja para completar el equipo...",
       "team": [ 
         {{ 
            "species": "Nombre", 
@@ -86,18 +79,18 @@ def process_strategy_in_background(session_id: str, data: dict):
            "ability": "Habilidad", 
            "item_suggestion": "Objeto", 
            "moves": ["M1", "M2", "M3", "M4"], 
-           "reason": "Explicación de la estrategia y uso del move_pool." 
+           "reason": "Explicación (Si vino de la caja, dilo aquí)." 
         }} 
       ]
     }}
     """
-
+    # (El resto de la llamada a la API sigue igual...)
     try:
         chat_completion = client.chat.completions.create(
             messages=[
                 {
                     "role": "system",
-                    "content": "Eres un asistente que solo responde en JSON válido."
+                    "content": "Eres un asistente que solo responde en JSON válido y siempre completa equipos de 6."
                 },
                 {
                     "role": "user",
@@ -122,16 +115,11 @@ def process_strategy_in_background(session_id: str, data: dict):
         print(f"❌ Error Groq: {e}")
         sessions_db[session_id] = {"error": f"Error técnico: {str(e)}"}
 
-# --- ENDPOINT CORREGIDO ---
 @app.post("/update-roster")
 async def update_roster(request: Request, background_tasks: BackgroundTasks):
     try:
         payload = await request.json()
         session_id = payload.get("session_id")
-        
-        # --- AQUÍ ESTABA EL ERROR ANTES ---
-        # Antes: team_data = payload.get("team") -> Esto daba None
-        # Ahora: Usamos 'payload' directamente porque Ruby envía los datos en la raíz
         team_data = payload 
         
         if not session_id: 
