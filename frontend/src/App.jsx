@@ -100,14 +100,16 @@ function App() {
             
             {/* --- CABECERA (ICONO + NOMBRE) --- */}
             <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px'}}>
-               {/* 🖼️ ICONO DEL POKEMON 🖼️ */}
-               <img 
+               {/* 🖼️ ICONO DEL POKEMON (MODO DEBUG) 🖼️ */}
+               <img
                  src={getIconUrl(pkmn.icon_file)} 
                  alt={pkmn.species} 
                  style={{width: '64px', height: '64px', imageRendering: 'pixelated'}} 
                  onError={(e) => { 
-                    // Si la imagen falla, la ocultamos para no romper el diseño
-                    e.target.style.display = 'none'; 
+                    // EN VEZ DE OCULTARLA, LA RESALTAMOS EN ROJO
+                    e.target.style.border = '2px solid red';
+                    // Y mostramos en la consola qué ruta falló
+                    console.log("❌ Falló al cargar:", e.target.src);
                  }}
                />
                
