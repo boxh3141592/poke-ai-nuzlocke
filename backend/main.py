@@ -5,6 +5,7 @@ import json
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
+# --- CONFIGURACIÓN ---
 api_key = os.environ.get("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key)
 
@@ -17,12 +18,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Base de datos en memoria
 sessions_db = {} 
 
+# Endpoint para UptimeRobot
 @app.get("/")
 def keep_alive():
     return {"status": "online", "message": "GeminiLink backend is running!"}
 
+# --- LÓGICA DE IA ---
 def process_strategy_in_background(session_id: str, data: dict):
     global sessions_db
     print(f"🧠 Procesando sesión: {session_id}")
@@ -35,41 +39,33 @@ def process_strategy_in_background(session_id: str, data: dict):
     
     if not party and not box:
         sessions_db[session_id] = {
-            "analysis_summary": "⚠️ No tienes Pokémon. Captura algunos primero.",
+            "analysis_summary": "⚠️ No se encontraron Pokémon. Asegúrate de tener al menos uno en el equipo.",
             "team": []
         }
         return
 
-    # --- PROMPT ACTUALIZADO (PIDE HABILIDAD) ---
     prompt = f"""
-    Eres el mejor estratega Pokémon.
-    
-    RECURSOS:
-    1. EQUIPO ACTUAL: {party}
-    2. CAJA: {box}
-    3. INVENTARIO: {inventory}
+    Eres un experto en mecánica de Pokémon.
+    EQUIPO: {party}
+    INVENTARIO: {inventory}
+    CAJA: {box}
 
-    MISIÓN: Construye el mejor equipo de 6. Rellena huecos con la caja si es necesario.
-    
-    FORMATO JSON OBLIGATORIO:
+    Diseña la mejor estrategia posible. Rellena el equipo hasta 6 si es necesario.
+    Responde SOLO en JSON:
     {{
-      "analysis_summary": "Resumen breve...",
+      "analysis_summary": "Consejo breve...",
       "team": [ 
-        {{ 
-           "species": "Nombre", 
-           "role": "Rol", 
-           "ability": "Nombre Habilidad",  <-- ESTO ES LO NUEVO
-           "item_suggestion": "Objeto", 
-           "moves": ["M1", "M2", "M3", "M4"], 
-           "reason": "Razón" 
-        }} 
+        {{ "species": "Nombre", "role": "Rol", "ability": "Habilidad", "item_suggestion": "Objeto", "moves": ["M1", "M2", "M3", "M4"], "reason": "Razón" }} 
       ]
     }}
     """
 
     try:
+        # --- AQUÍ ESTÁ EL CAMBIO CLAVE ---
+        # Forzamos 'gemini-1.5-flash'. Si este nombre falla, es un problema de la librería de Render.
+        # Pero es el único camino para tener 1500 peticiones gratis.
         response = client.models.generate_content(
-            model='gemini-flash-latest', 
+            model='gemini-1.5-flash', 
             contents=prompt,
             config=types.GenerateContentConfig(response_mime_type='application/json')
         )
@@ -79,7 +75,7 @@ def process_strategy_in_background(session_id: str, data: dict):
         new_analysis["inventory_data"] = inventory
         
         sessions_db[session_id] = new_analysis
-        print(f"✅ Estrategia con Habilidades lista: {session_id}")
+        print(f"✅ Estrategia lista: {session_id}")
         
     except Exception as e:
         print(f"❌ Error IA: {e}")
@@ -91,6 +87,7 @@ async def update_roster(request: Request, background_tasks: BackgroundTasks):
         payload = await request.json()
         session_id = payload.get("session_id")
         team_data = payload.get("team")
+        
         if not session_id: return {"status": "error", "message": "No ID"}
 
         background_tasks.add_task(process_strategy_in_background, session_id, team_data)
