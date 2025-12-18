@@ -26,13 +26,12 @@ sessions_db = {}
 def keep_alive():
     return {"status": "online", "message": "GeminiLink backend is running!"}
 
-# --- HERRAMIENTA DE DIAGNÓSTICO (CORREGIDA) ---
+# --- HERRAMIENTA DE DIAGNÓSTICO ---
+# La dejamos por si acaso, es muy útil
 @app.get("/models")
 def list_models():
     try:
-        # Versión simplificada: Solo listar nombres para que no de error
         m = client.models.list()
-        # Convertimos a lista de strings simple para evitar errores de atributos
         nombres = [str(model.name).replace("models/", "") for model in m]
         return {"available_models": nombres}
     except Exception as e:
@@ -73,10 +72,11 @@ def process_strategy_in_background(session_id: str, data: dict):
     """
 
     try:
-        # INTENTO PRINCIPAL: Usamos 'gemini-1.5-flash'
-        # Si este falla, TU MISMO podrás ver en /models cuál es el nombre correcto
+        # --- EL CAMBIO DEFINITIVO ---
+        # Usamos 'gemini-2.0-flash' porque confirmamos que ESTÁ en tu lista.
+        # Es más rápido y mejor que el 1.5, y no tiene el límite estricto del 2.5.
         response = client.models.generate_content(
-            model='gemini-1.5-flash', 
+            model='gemini-2.0-flash', 
             contents=prompt,
             config=types.GenerateContentConfig(response_mime_type='application/json')
         )
