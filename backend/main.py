@@ -2,10 +2,9 @@ from fastapi import FastAPI, Request, BackgroundTasks
 import json
 from fastapi.middleware.cors import CORSMiddleware
 import os
-from groq import Groq  # <--- CAMBIO IMPORTANTE
+from groq import Groq
 
 # --- CONFIGURACIÓN ---
-# Asegúrate de haber puesto la clave en Render como GROQ_API_KEY
 api_key = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=api_key)
 
@@ -22,7 +21,20 @@ sessions_db = {}
 
 @app.get("/")
 def keep_alive():
-    return {"status": "online", "message": "Backend running with Groq!"}
+    return {"status": "online", "message": "Backend running with Groq Llama 3.3!"}
+
+# --- DIAGNÓSTICO PARA GROQ ---
+# Si vuelve a fallar, entra a /models para ver los nombres nuevos
+@app.get("/models")
+def list_models():
+    try:
+        # Groq también tiene una función para listar modelos
+        models = client.models.list()
+        # Extraemos solo los IDs de los modelos
+        nombres = [m.id for m in models.data]
+        return {"available_models": nombres}
+    except Exception as e:
+        return {"error": str(e)}
 
 def process_strategy_in_background(session_id: str, data: dict):
     global sessions_db
@@ -41,7 +53,6 @@ def process_strategy_in_background(session_id: str, data: dict):
         }
         return
 
-    # Prompt idéntico
     prompt = f"""
     Eres un experto en Pokémon competitivo.
     EQUIPO: {party}
@@ -61,25 +72,25 @@ def process_strategy_in_background(session_id: str, data: dict):
     """
 
     try:
-        # --- LLAMADA A GROQ ---
         chat_completion = client.chat.completions.create(
             messages=[
                 {
                     "role": "system",
-                    "content": "Eres un asistente que solo habla en JSON."
+                    "content": "Eres un asistente que solo habla en JSON válido."
                 },
                 {
                     "role": "user",
                     "content": prompt,
                 }
             ],
-            model="llama3-70b-8192", # Modelo muy potente y rápido
+            # --- CAMBIO IMPORTANTE: MODELO ACTUALIZADO ---
+            # Usamos la versión 3.3 Versatile, que es la actual.
+            # Si en el futuro falla, revisa /models
+            model="llama-3.3-70b-versatile", 
             temperature=0.5,
-            # Esto fuerza a la IA a devolver JSON sí o sí
             response_format={"type": "json_object"}, 
         )
 
-        # Procesamos la respuesta
         response_content = chat_completion.choices[0].message.content
         new_analysis = json.loads(response_content)
         
