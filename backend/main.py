@@ -1,4 +1,3 @@
-# main.py (Versión con Soporte Multi-Sesión)
 from fastapi import FastAPI, Request, BackgroundTasks
 from google import genai
 from google.genai import types
@@ -6,7 +5,6 @@ import json
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
-# --- CONFIGURACIÓN ---
 api_key = os.environ.get("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key)
 
@@ -19,48 +17,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- MEMORIA RAM DEL SERVIDOR (Multi-Usuario) ---
-# Ahora es un diccionario donde la clave es el ID de sesión
+# Base de datos en memoria (ID -> Datos)
 sessions_db = {} 
 
-# --- FUNCIÓN EN SEGUNDO PLANO ---
 def process_strategy_in_background(session_id: str, data: dict):
     global sessions_db
-    print(f"🧠 Gemini analizando para la sesión: {session_id}")
+    print(f"🧠 Procesando sesión: {session_id}")
     
-    # Marcamos como "procesando"
-    sessions_db[session_id] = {"status": "thinking", "message": "La IA está pensando tu estrategia..."}
+    # Marcamos como "pensando"
+    sessions_db[session_id] = {"status": "thinking"}
+
+    # VERIFICACIÓN DE SEGURIDAD: ¿Hay Pokémon?
+    party = data.get('party', [])
+    box = data.get('box', [])
+    
+    if not party and not box:
+        # Si no hay Pokémon, no gastamos IA, devolvemos aviso directo.
+        sessions_db[session_id] = {
+            "analysis_summary": "⚠️ No se encontraron Pokémon en los datos recibidos. Asegúrate de tener al menos un Pokémon en tu equipo o PC antes de pedir una estrategia.",
+            "team": []
+        }
+        print("⚠️ Datos vacíos recibidos.")
+        return
 
     prompt = f"""
-    Eres un experto en mecánica de Pokémon (Nuzlockes/Fan-Games).
-    HE EXTRAÍDO LOS DATOS INTERNOS (PBS) DEL JUEGO.
-    
-    1. EQUIPO (Party): {data.get('party')}
-    2. INVENTARIO: {data.get('inventory')}
-    3. RESERVA (PC): {data.get('box')}
+    Eres un experto en mecánica de Pokémon.
+    EQUIPO: {party}
+    INVENTARIO: {data.get('inventory')}
+    CAJA: {box}
 
-    TU MISIÓN:
-    Diseña la estrategia perfecta basándote en la matemática de los datos enviados.
-    
-    REGLAS:
-    - DATOS REALES: Usa la potencia/precisión/descripción que te envío.
-    - MOVIMIENTOS: Elige los 4 mejores del 'move_pool'. Prioriza STAB.
-    - OBJETOS: Asigna objetos del inventario útiles.
-    - ROLES: Define roles competitivos.
-
-    FORMATO JSON:
+    Crea una estrategia competitiva (Roles, Objetos, Movimientos) para este equipo.
+    Responde SOLO en JSON con este formato:
     {{
-      "analysis_summary": "Consejo general...",
-      "team": [
-        {{
-          "species": "Nombre",
-          "role": "Rol",
-          "item_suggestion": "Objeto",
-          "moves": ["M1", "M2", "M3", "M4"],
-          "ability": "Nombre",
-          "reason": "Explicación"
-        }}
-      ]
+      "analysis_summary": "Resumen...",
+      "team": [ {{ "species": "Nombre", "role": "Rol", "item_suggestion": "Objeto", "moves": ["M1", "M2", "M3", "M4"], "reason": "Razón" }} ]
     }}
     """
 
@@ -70,53 +60,33 @@ def process_strategy_in_background(session_id: str, data: dict):
             contents=prompt,
             config=types.GenerateContentConfig(response_mime_type='application/json')
         )
-        
         new_analysis = json.loads(response.text)
         
-        # Inyectamos datos crudos para el frontend
-        if "party" in data: new_analysis["raw_party_data"] = data["party"]
-        if "inventory" in data: new_analysis["inventory_data"] = data["inventory"]
+        # Inyectar datos originales para el frontend
+        new_analysis["raw_party_data"] = party
+        new_analysis["inventory_data"] = data.get('inventory', [])
         
-        # Guardamos en la base de datos CON EL ID
         sessions_db[session_id] = new_analysis
-        print(f"✅ Estrategia lista para ID {session_id}")
         
     except Exception as e:
-        print(f"❌ Error en sesión {session_id}: {e}")
+        print(f"Error IA: {e}")
         sessions_db[session_id] = {"error": str(e)}
 
-# --- ENDPOINT DE RECEPCIÓN ---
 @app.post("/update-roster")
 async def update_roster(request: Request, background_tasks: BackgroundTasks):
     try:
         payload = await request.json()
-        
-        # Obtenemos los datos y el ID
         session_id = payload.get("session_id")
         team_data = payload.get("team")
         
-        if not session_id or not team_data:
-            return {"status": "error", "message": "Faltan datos o ID"}
+        if not session_id: return {"status": "error", "message": "No ID"}
 
-        # Lanzamos la tarea con el ID específico
         background_tasks.add_task(process_strategy_in_background, session_id, team_data)
-        
         return {"status": "queued", "id": session_id}
-        
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# --- ENDPOINT DE CONSULTA (AHORA PIDE ID) ---
 @app.get("/get-analysis")
 async def get_analysis(id: str = None):
-    # Si no nos dan ID, error
-    if not id:
-        return {"error": "Falta el ID de sesión"}
-    
-    # Buscamos en la memoria
-    data = sessions_db.get(id)
-    
-    if not data:
-        return {"status": "waiting", "message": "Esperando datos o ID inválido"}
-        
-    return data
+    if not id: return {"error": "Falta ID"}
+    return sessions_db.get(id, {"status": "waiting"})
