@@ -21,7 +21,7 @@ const styles = {
   roleTag: { backgroundColor: '#374151', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', color: '#9ca3af', display: 'inline-block', marginBottom:'10px' },
   moveList: { listStyle: 'none', padding: 0, marginTop: '10px' },
   itemText: { color: '#e0e0e0', position: 'relative', cursor: 'help' }, 
-  abilityText: { color: '#a78bfa', position: 'relative', cursor: 'help', fontWeight: 'bold' }, // Color morado claro para habilidad
+  abilityText: { color: '#a78bfa', position: 'relative', cursor: 'help', fontWeight: 'bold' }, 
   moveItem: { color: '#34d399', borderBottom: '1px solid #444', padding: '8px 5px', fontSize: '1rem', cursor: 'pointer', position: 'relative', display: 'flex', justifyContent: 'space-between' },
   
   tooltip: { 
@@ -48,16 +48,38 @@ function App() {
     const fetchData = async () => {
       try {
         const res = await axios.get(`https://poke-ai-nuzlocke.onrender.com/get-analysis?id=${sessionId}`);
-        if (res.data.status === 'thinking') setStatusMsg("🧠 La IA está pensando...");
-        else if (res.data.analysis_summary) setData(res.data);
-        else if (res.data.error) setStatusMsg(`❌ Error: ${res.data.error}`);
-        else setStatusMsg("⏳ Esperando datos...");
-      } catch (e) { console.log("Esperando conexión..."); }
+        
+        // --- AQUÍ ESTÁ LA CORRECCIÓN DE LA LÓGICA ---
+        if (res.data.status === 'thinking') {
+            // Si está pensando, avisamos
+            setStatusMsg("🧠 La IA está pensando...");
+        } 
+        else if (res.data.analysis_summary) {
+            // Si hay datos nuevos, actualizamos todo
+            setData(res.data);
+        } 
+        else if (res.data.error) {
+            // Si hay error, avisamos
+            setStatusMsg(`❌ Error: ${res.data.error}`);
+        } 
+        else {
+            // Si el servidor dice "waiting" (status waiting)...
+            // SOLO mostramos "Esperando..." si NO tenemos datos en pantalla.
+            // Si ya tenemos datos, IGNORAMOS el waiting para que no se borre la pantalla.
+            if (!data) {
+                setStatusMsg("⏳ Esperando datos del juego...");
+            }
+        }
+      } catch (e) { 
+          // Si falla la conexión, no borramos los datos si ya los tenemos
+          if (!data) setStatusMsg("Esperando conexión...");
+      }
     };
+    
     fetchData();
     const interval = setInterval(fetchData, 3000);
     return () => clearInterval(interval);
-  }, []);
+  }, [data]); // Añadimos 'data' como dependencia para que sepa cuándo ya tiene info
 
   const getGifUrl = (species) => `https://play.pokemonshowdown.com/sprites/xyani/${species?.toLowerCase().replace(/[^a-z0-9]/g, '')}.gif`;
   const openWiki = (term) => term && window.open(`https://www.wikidex.net/wiki/${term.split(':')[0].trim().replace(/ /g, '_')}`, '_blank');
@@ -68,19 +90,15 @@ function App() {
     return found ? (found.includes(':') ? found.split(':').slice(1).join(':').trim() : found) : "Descripción no disponible.";
   };
 
-  // --- NUEVA LÓGICA PARA DESCRIPCIÓN DE HABILIDAD ---
   const getAbilityDescription = (pkmnName, abilityName) => {
-    // 1. Buscamos al Pokémon en los datos crudos que envió el juego
     const rawPkmn = data?.raw_party_data?.find(p => p.species === pkmnName);
-    
-    // 2. Si es el Pokémon del equipo, tiene la data de habilidad
     if (rawPkmn && rawPkmn.ability && rawPkmn.ability.name === abilityName) {
         return rawPkmn.ability.desc;
     }
-    // 3. Si viene de la caja o la IA sugirió otra, no tenemos la descripción exacta
     return "Descripción detallada no disponible para sugerencias de caja.";
   };
 
+  // Solo mostramos el mensaje de carga si NO hay datos
   if (!data) return <div style={{...styles.container, textAlign:'center', display:'flex', flexDirection:'column', justifyContent:'center', alignItems:'center'}}><h1 style={{color: '#fbbf24'}}>🎮 GeminiLink</h1><h3>{statusMsg}</h3></div>;
 
   return (
@@ -97,7 +115,6 @@ function App() {
             </div>
             <span style={styles.roleTag}>{pkmn.role}</span>
 
-            {/* --- SECCIÓN DE HABILIDAD (NUEVA) --- */}
             <div style={{marginTop: '5px'}}>
                 <strong>Habilidad: </strong>
                 <span 
