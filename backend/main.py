@@ -1,13 +1,13 @@
 from fastapi import FastAPI, Request, BackgroundTasks
-from google import genai
-from google.genai import types
 import json
 from fastapi.middleware.cors import CORSMiddleware
 import os
+from groq import Groq  # <--- CAMBIO IMPORTANTE
 
 # --- CONFIGURACIÓN ---
-api_key = os.environ.get("GEMINI_API_KEY")
-client = genai.Client(api_key=api_key)
+# Asegúrate de haber puesto la clave en Render como GROQ_API_KEY
+api_key = os.environ.get("GROQ_API_KEY")
+client = Groq(api_key=api_key)
 
 app = FastAPI()
 
@@ -18,28 +18,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Base de datos en memoria
 sessions_db = {} 
 
-# --- ENDPOINT ANTI-SUEÑO ---
 @app.get("/")
 def keep_alive():
-    return {"status": "online", "message": "GeminiLink backend is running!"}
+    return {"status": "online", "message": "Backend running with Groq!"}
 
-# --- DIAGNÓSTICO ---
-@app.get("/models")
-def list_models():
-    try:
-        m = client.models.list()
-        nombres = [str(model.name).replace("models/", "") for model in m]
-        return {"available_models": nombres}
-    except Exception as e:
-        return {"error": f"Error listando modelos: {str(e)}"}
-
-# --- LÓGICA DE IA ---
 def process_strategy_in_background(session_id: str, data: dict):
     global sessions_db
-    print(f"🧠 Procesando sesión: {session_id}")
+    print(f"🧠 Procesando sesión con Groq: {session_id}")
     
     sessions_db[session_id] = {"status": "thinking"}
 
@@ -49,19 +36,22 @@ def process_strategy_in_background(session_id: str, data: dict):
     
     if not party and not box:
         sessions_db[session_id] = {
-            "analysis_summary": "⚠️ No se encontraron Pokémon. Asegúrate de tener al menos uno en el equipo.",
+            "analysis_summary": "⚠️ No se encontraron Pokémon.",
             "team": []
         }
         return
 
+    # Prompt idéntico
     prompt = f"""
-    Eres un experto en mecánica de Pokémon.
+    Eres un experto en Pokémon competitivo.
     EQUIPO: {party}
     INVENTARIO: {inventory}
     CAJA: {box}
 
-    Diseña la mejor estrategia posible. Rellena el equipo hasta 6 si es necesario.
-    Responde SOLO en JSON:
+    Diseña la mejor estrategia de 6 Pokémon.
+    Responde SOLO y EXCLUSIVAMENTE con un JSON válido. No escribas nada antes ni después del JSON.
+    
+    Formato JSON:
     {{
       "analysis_summary": "Consejo breve...",
       "team": [ 
@@ -71,25 +61,36 @@ def process_strategy_in_background(session_id: str, data: dict):
     """
 
     try:
-        # --- CAMBIO DE MODELO ---
-        # Usamos la versión 'Lite Preview' específica que salió en tu lista.
-        # Esta suele tener los límites más generosos para cuentas gratuitas.
-        # Si esta fallara, podrías probar cambiar esta línea por 'gemini-2.5-pro'
-        response = client.models.generate_content(
-            model='gemini-2.0-flash-lite-preview-02-05', 
-            contents=prompt,
-            config=types.GenerateContentConfig(response_mime_type='application/json')
+        # --- LLAMADA A GROQ ---
+        chat_completion = client.chat.completions.create(
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Eres un asistente que solo habla en JSON."
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ],
+            model="llama3-70b-8192", # Modelo muy potente y rápido
+            temperature=0.5,
+            # Esto fuerza a la IA a devolver JSON sí o sí
+            response_format={"type": "json_object"}, 
         )
+
+        # Procesamos la respuesta
+        response_content = chat_completion.choices[0].message.content
+        new_analysis = json.loads(response_content)
         
-        new_analysis = json.loads(response.text)
         new_analysis["raw_party_data"] = party
         new_analysis["inventory_data"] = inventory
         
         sessions_db[session_id] = new_analysis
-        print(f"✅ Estrategia lista: {session_id}")
+        print(f"✅ Estrategia lista (Groq): {session_id}")
         
     except Exception as e:
-        print(f"❌ Error IA: {e}")
+        print(f"❌ Error Groq: {e}")
         sessions_db[session_id] = {"error": f"Error técnico: {str(e)}"}
 
 @app.post("/update-roster")
