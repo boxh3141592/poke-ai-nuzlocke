@@ -21,10 +21,23 @@ app.add_middleware(
 # Base de datos en memoria
 sessions_db = {} 
 
-# Endpoint para UptimeRobot
+# --- ENDPOINT ANTI-SUEÑO ---
 @app.get("/")
 def keep_alive():
     return {"status": "online", "message": "GeminiLink backend is running!"}
+
+# --- HERRAMIENTA DE DIAGNÓSTICO (NUEVO) ---
+# Si algo falla, entra a tuweb.com/models para ver qué nombres acepta Google
+@app.get("/models")
+def list_models():
+    try:
+        # Esto nos dirá la verdad sobre qué modelos están disponibles
+        m = client.models.list()
+        # Filtramos solo los que sirven para generar contenido
+        nombres = [model.name for model in m if "generateContent" in model.supported_generation_methods]
+        return {"available_models": nombres}
+    except Exception as e:
+        return {"error": str(e)}
 
 # --- LÓGICA DE IA ---
 def process_strategy_in_background(session_id: str, data: dict):
@@ -61,11 +74,11 @@ def process_strategy_in_background(session_id: str, data: dict):
     """
 
     try:
-        # --- AQUÍ ESTÁ EL CAMBIO CLAVE ---
-        # Forzamos 'gemini-1.5-flash'. Si este nombre falla, es un problema de la librería de Render.
-        # Pero es el único camino para tener 1500 peticiones gratis.
+        # --- EL CAMBIO CLAVE ---
+        # Usamos la versión '002' que es la estable actual de la serie 1.5.
+        # Esta tiene 1500 peticiones gratis al día y NO es la 2.5 experimental.
         response = client.models.generate_content(
-            model='gemini-1.5-flash', 
+            model='gemini-1.5-flash-002', 
             contents=prompt,
             config=types.GenerateContentConfig(response_mime_type='application/json')
         )
@@ -79,7 +92,8 @@ def process_strategy_in_background(session_id: str, data: dict):
         
     except Exception as e:
         print(f"❌ Error IA: {e}")
-        sessions_db[session_id] = {"error": str(e)}
+        # Guardamos el error para que lo veas en la web si pasa algo
+        sessions_db[session_id] = {"error": f"Error técnico: {str(e)}"}
 
 @app.post("/update-roster")
 async def update_roster(request: Request, background_tasks: BackgroundTasks):
