@@ -53,22 +53,42 @@ def process_strategy_in_background(session_id: str, data: dict):
         }
         return
 
-    prompt = f"""
-    Eres un experto en Pokémon competitivo.
-    EQUIPO: {party}
-    INVENTARIO: {inventory}
-    CAJA: {box}
+ # ... (Imports y Configuración igual que antes) ...
 
-    Diseña la mejor estrategia de 6 Pokémon.
-    Responde SOLO y EXCLUSIVAMENTE con un JSON válido. No escribas nada antes ni después del JSON.
+    prompt = f"""
+    Eres el mejor entrenador Pokémon del mundo experto en Nuzlockes.
     
-    Formato JSON:
+    Tengo un equipo Pokémon y necesito que optimices sus movimientos.
+    
+    DATOS RECIBIDOS:
+    1. EQUIPO ("party"): Lista de mis Pokémon. Cada uno tiene un campo "move_pool".
+    2. MOVE POOL: Es la lista de TODOS los ataques que ese Pokémon puede aprender (incluye los que ya tiene, los que olvidó y las MTs de mi mochila).
+    
+    TU MISIÓN:
+    Para CADA Pokémon del equipo, elige los 4 MEJORES movimientos posibles sacados de su "move_pool".
+    
+    REGLAS:
+    - NO te limites a los ataques que ya tiene. Revisa todo el "move_pool".
+    - Si encuentras un ataque en el "move_pool" que es mejor que uno actual (ej: tiene Lanzallamas en pool pero Arañazo equipado), ¡Dímelo!
+    - Explica en "reason" qué cambios hiciste (ej: "Sustituí Arañazo por Lanzallamas porque tienes la MT").
+
+    Responde SOLO JSON válido:
     {{
-      "analysis_summary": "Consejo breve...",
+      "analysis_summary": "Resumen general del estado del equipo...",
       "team": [ 
-        {{ "species": "Nombre", "role": "Rol", "ability": "Habilidad", "item_suggestion": "Objeto", "moves": ["M1", "M2", "M3", "M4"], "reason": "Razón" }} 
+        {{ 
+           "species": "Nombre", 
+           "role": "Atacante Físico / Tanque / etc", 
+           "ability": "Nombre Habilidad", 
+           "item_suggestion": "Objeto sugerido", 
+           "moves": ["Ataque 1", "Ataque 2", "Ataque 3", "Ataque 4"], 
+           "reason": "Explica la estrategia y si cambiaste ataques usando el move_pool." 
+        }} 
       ]
     }}
+    
+    AQUÍ ESTÁN LOS DATOS RAW DEL JUEGO:
+    {json.dumps(party)}
     """
 
     try:
