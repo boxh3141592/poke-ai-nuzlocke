@@ -8,13 +8,14 @@ const styles = {
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' },
   card: { backgroundColor: '#2d2d2d', padding: '15px', borderRadius: '15px', border: '1px solid #333', position: 'relative' },
   
-  // Estilos interactivos
+  // Nombres y Elementos interactivos (WikiDex)
   clickable: { cursor: 'pointer', transition: 'color 0.2s', textDecoration: 'underline', textDecorationColor: 'rgba(255,255,255,0.2)' },
   pokeName: { color: '#60a5fa', margin: '0', fontSize: '1.4rem', textTransform: 'capitalize', cursor: 'pointer' },
   
   roleTag: { backgroundColor: '#374151', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', color: '#9ca3af', display: 'inline-block', marginBottom:'10px' },
   moveList: { listStyle: 'none', padding: 0, marginTop: '10px' },
   
+  // Items y Movimientos
   itemText: { color: '#e0e0e0', position: 'relative', cursor: 'help' }, 
   moveItem: { 
     color: '#34d399', borderBottom: '1px solid #444', padding: '8px 5px', fontSize: '1rem', 
@@ -51,11 +52,12 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // --- FUNCIÓN PARA OBTENER URL DEL ICONO ---
-  // Recibe "ABRA" o "ABOMASNOW_1" y devuelve la ruta al archivo PNG
+  // --- FUNCIÓN PARA OBTENER URL DEL ICONO (CORREGIDA) ---
   const getIconUrl = (fileName) => {
     if (!fileName) return null;
-    return `/pokemon-icons/${fileName}.png`; 
+    // Forzamos MAYÚSCULAS para que coincida con tus archivos (ej: "ARON.png")
+    const cleanName = String(fileName).toUpperCase();
+    return `/pokemon-icons/${cleanName}.png`; 
   };
 
   const openWiki = (term) => {
