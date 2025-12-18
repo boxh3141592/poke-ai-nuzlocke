@@ -26,18 +26,17 @@ sessions_db = {}
 def keep_alive():
     return {"status": "online", "message": "GeminiLink backend is running!"}
 
-# --- HERRAMIENTA DE DIAGNÓSTICO (NUEVO) ---
-# Si algo falla, entra a tuweb.com/models para ver qué nombres acepta Google
+# --- HERRAMIENTA DE DIAGNÓSTICO (CORREGIDA) ---
 @app.get("/models")
 def list_models():
     try:
-        # Esto nos dirá la verdad sobre qué modelos están disponibles
+        # Versión simplificada: Solo listar nombres para que no de error
         m = client.models.list()
-        # Filtramos solo los que sirven para generar contenido
-        nombres = [model.name for model in m if "generateContent" in model.supported_generation_methods]
+        # Convertimos a lista de strings simple para evitar errores de atributos
+        nombres = [str(model.name).replace("models/", "") for model in m]
         return {"available_models": nombres}
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": f"Error listando modelos: {str(e)}"}
 
 # --- LÓGICA DE IA ---
 def process_strategy_in_background(session_id: str, data: dict):
@@ -74,11 +73,10 @@ def process_strategy_in_background(session_id: str, data: dict):
     """
 
     try:
-        # --- EL CAMBIO CLAVE ---
-        # Usamos la versión '002' que es la estable actual de la serie 1.5.
-        # Esta tiene 1500 peticiones gratis al día y NO es la 2.5 experimental.
+        # INTENTO PRINCIPAL: Usamos 'gemini-1.5-flash'
+        # Si este falla, TU MISMO podrás ver en /models cuál es el nombre correcto
         response = client.models.generate_content(
-            model='gemini-1.5-flash-002', 
+            model='gemini-1.5-flash', 
             contents=prompt,
             config=types.GenerateContentConfig(response_mime_type='application/json')
         )
@@ -92,7 +90,6 @@ def process_strategy_in_background(session_id: str, data: dict):
         
     except Exception as e:
         print(f"❌ Error IA: {e}")
-        # Guardamos el error para que lo veas en la web si pasa algo
         sessions_db[session_id] = {"error": f"Error técnico: {str(e)}"}
 
 @app.post("/update-roster")
