@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 
+// --- ESTILOS (Los mismos que tenías, intactos) ---
 const styles = {
   container: { backgroundColor: '#121212', color: '#e0e0e0', minHeight: '100vh', padding: '20px', fontFamily: 'Segoe UI, sans-serif' },
   header: { textAlign: 'center', color: '#fbbf24', fontSize: '2rem', marginBottom: '20px' },
@@ -20,28 +21,46 @@ const styles = {
 
 function App() {
   const [data, setData] = useState(null);
-  const [hoveredData, setHoveredData] = useState(null); 
+  const [hoveredData, setHoveredData] = useState(null);
+  const [statusMsg, setStatusMsg] = useState("Cargando...");
 
   useEffect(() => {
+    // 1. Obtener el ID de la URL (?id=123456)
+    const queryParams = new URLSearchParams(window.location.search);
+    const sessionId = queryParams.get('id');
+
+    if (!sessionId) {
+      setStatusMsg("⚠️ Error: No se detectó ID de sesión. Abre esta página desde el juego.");
+      return;
+    }
+
     const fetchData = async () => {
       try {
-        const res = await axios.get('https://poke-ai-nuzlocke.onrender.com/get-analysis');
-        if (res.data && res.data.analysis_summary) setData(res.data);
-      } catch (e) { console.log("Esperando datos..."); }
+        // 2. Pedir datos ESPECÍFICOS para este ID
+        const res = await axios.get(`https://poke-ai-nuzlocke.onrender.com/get-analysis?id=${sessionId}`);
+        
+        if (res.data.status === 'thinking') {
+          setStatusMsg("🧠 La IA está pensando tu estrategia...");
+        } else if (res.data.analysis_summary) {
+          setData(res.data);
+        } else if (res.data.error) {
+           setStatusMsg(`❌ Error del servidor: ${res.data.error}`);
+        } else {
+           setStatusMsg("⏳ Esperando datos del juego...");
+        }
+      } catch (e) { 
+        console.log("Error de red o servidor no listo."); 
+      }
     };
+
     fetchData();
-    const interval = setInterval(fetchData, 3000);
+    const interval = setInterval(fetchData, 3000); // Polling cada 3 segundos
     return () => clearInterval(interval);
   }, []);
 
-  // --- NUEVA FUNCIÓN: GIFs DESDE INTERNET ---
   const getGifUrl = (speciesName) => {
     if (!speciesName) return null;
-    // 1. Limpiamos el nombre: Minúsculas y quitamos espacios (ej: "Mr. Mime" -> "mrmime")
-    // Esto es necesario para que coincida con la URL de Showdown
     const cleanName = speciesName.toLowerCase().replace(/ /g, '').replace(/[^a-z0-9]/g, '');
-    
-    // 2. Usamos los servidores de Pokémon Showdown (Animados XY)
     return `https://play.pokemonshowdown.com/sprites/xyani/${cleanName}.gif`; 
   };
 
@@ -62,35 +81,32 @@ function App() {
     return found ? (found.includes(':') ? found.split(':').slice(1).join(':').trim() : found) : "Objeto no encontrado.";
   };
 
-  if (!data) return <div style={{...styles.container, textAlign:'center'}}><h1>🎮 Esperando datos...</h1></div>;
+  if (!data) return (
+    <div style={{...styles.container, textAlign:'center', display:'flex', flexDirection:'column', justifyContent:'center', alignItems:'center'}}>
+      <h1 style={{color: '#fbbf24'}}>🎮 GeminiLink</h1>
+      <h3>{statusMsg}</h3>
+    </div>
+  );
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.header}>🧠 Estrategia Randomlocke IA</h1>
+      <h1 style={styles.header}>🧠 Estrategia Randomlocke IA (ID: {new URLSearchParams(window.location.search).get('id')})</h1>
       {data.analysis_summary && (<div style={styles.summaryBox}><strong>💡 Consejo General:</strong><p>{data.analysis_summary}</p></div>)}
 
       <div style={styles.grid}>
         {data.team?.map((pkmn, pIndex) => (
           <div key={pIndex} style={styles.card}>
             <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px'}}>
-               
-               {/* 🎞️ GIF ANIMADO DESDE INTERNET 🎞️ */}
                <img 
-                 // Usamos pkmn.species (Nombre Real) en lugar de icon_file para evitar problemas con "_1"
                  src={getGifUrl(pkmn.species)} 
                  alt={pkmn.species} 
                  style={{height: '60px', imageRendering: 'pixelated'}} 
                  onError={(e) => { 
-                    // Si falla el GIF animado (raro), intentamos cargar una imagen estática de respaldo
                     const staticUrl = `https://img.pokemondb.net/sprites/home/normal/${pkmn.species.toLowerCase()}.png`;
-                    if (e.target.src !== staticUrl) {
-                        e.target.src = staticUrl;
-                    } else {
-                        e.target.style.display = 'none';
-                    }
+                    if (e.target.src !== staticUrl) e.target.src = staticUrl;
+                    else e.target.style.display = 'none';
                  }}
                />
-               
                <h2 style={{...styles.pokeName, ...styles.clickable}} onClick={() => openWiki(pkmn.species)}>{pkmn.species} 🔗</h2>
             </div>
 
