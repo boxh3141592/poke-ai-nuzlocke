@@ -26,8 +26,7 @@ sessions_db = {}
 def keep_alive():
     return {"status": "online", "message": "GeminiLink backend is running!"}
 
-# --- HERRAMIENTA DE DIAGNÓSTICO ---
-# La dejamos por si acaso, es muy útil
+# --- DIAGNÓSTICO ---
 @app.get("/models")
 def list_models():
     try:
@@ -72,11 +71,12 @@ def process_strategy_in_background(session_id: str, data: dict):
     """
 
     try:
-        # --- EL CAMBIO DEFINITIVO ---
-        # Usamos 'gemini-2.0-flash' porque confirmamos que ESTÁ en tu lista.
-        # Es más rápido y mejor que el 1.5, y no tiene el límite estricto del 2.5.
+        # --- CAMBIO DE MODELO ---
+        # Usamos la versión 'Lite Preview' específica que salió en tu lista.
+        # Esta suele tener los límites más generosos para cuentas gratuitas.
+        # Si esta fallara, podrías probar cambiar esta línea por 'gemini-2.5-pro'
         response = client.models.generate_content(
-            model='gemini-2.0-flash', 
+            model='gemini-2.0-flash-lite-preview-02-05', 
             contents=prompt,
             config=types.GenerateContentConfig(response_mime_type='application/json')
         )
