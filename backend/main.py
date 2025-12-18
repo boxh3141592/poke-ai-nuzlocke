@@ -11,7 +11,6 @@ client = genai.Client(api_key=api_key)
 
 app = FastAPI()
 
-# Configuración de CORS para permitir conexiones desde cualquier lugar
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,12 +19,11 @@ app.add_middleware(
 )
 
 # --- BASE DE DATOS EN MEMORIA (DICCIONARIO DE SESIONES) ---
-# Antes era 'latest_analysis', ahora guardamos por ID:
-# { "123456": {datos_usuario_A}, "987654": {datos_usuario_B} }
+# Aquí guardamos los datos de cada jugador por separado
 sessions_db = {} 
 
 # --- ENDPOINT ANTI-SUEÑO (KEEP ALIVE) ---
-# UptimeRobot visitará esto cada 10 min para que Render no se duerma
+# Esto es para que UptimeRobot mantenga el servidor despierto
 @app.get("/")
 def keep_alive():
     return {"status": "online", "message": "GeminiLink backend is running!"}
@@ -52,43 +50,45 @@ def process_strategy_in_background(session_id: str, data: dict):
         print(f"⚠️ Datos vacíos recibidos para sesión {session_id}.")
         return
 
-    # 4. Prompt para Gemini
+    # 4. Prompt (Tu versión original)
     prompt = f"""
     Eres un experto en mecánica de Pokémon (Nuzlockes/Fan-Games).
+    HE EXTRAÍDO LOS DATOS INTERNOS (PBS) DEL JUEGO.
     
-    CONTEXTO DEL JUGADOR:
-    - EQUIPO ACTUAL: {party}
-    - INVENTARIO: {inventory}
-    - CAJA (PC): {box}
+    1. EQUIPO (Party): {party}
+    2. INVENTARIO: {inventory}
+    3. RESERVA (PC): {box}
 
     TU MISIÓN:
-    Diseña la mejor estrategia posible con estos recursos.
+    Diseña la estrategia perfecta basándote en la matemática de los datos enviados.
     
     REGLAS:
-    - Usa los datos técnicos (Potencia, Precisión) que te doy en el JSON.
-    - Si el equipo es débil, sugiere cambios usando Pokémon de la CAJA.
-    - Asigna objetos del INVENTARIO si son útiles.
+    - DATOS REALES: Usa la potencia/precisión/descripción que te envío, no lo que creas saber.
+    - MOVIMIENTOS: Elige los 4 mejores del 'move_pool'. Prioriza STAB.
+    - OBJETOS: Asigna objetos del inventario útiles según descripción.
+    - ROLES: Define roles competitivos.
 
-    FORMATO DE RESPUESTA (JSON PURO):
+    FORMATO JSON:
     {{
-      "analysis_summary": "Consejo general estratégico y breve...",
-      "team": [ 
-        {{ 
-            "species": "Nombre", 
-            "role": "Atacante Físico/Tanque/Support/etc", 
-            "item_suggestion": "Objeto o 'Nada'", 
-            "moves": ["Mov1", "Mov2", "Mov3", "Mov4"], 
-            "reason": "Por qué esta configuración es buena" 
-        }} 
+      "analysis_summary": "Consejo general...",
+      "team": [
+        {{
+          "species": "Nombre",
+          "role": "Rol",
+          "item_suggestion": "Objeto",
+          "moves": ["M1", "M2", "M3", "M4"],
+          "ability": "Nombre",
+          "reason": "Explicación"
+        }}
       ]
     }}
     """
 
     try:
-        # --- CORRECCIÓN DE MODELO ---
-        # Usamos 'gemini-1.5-flash-001' para evitar errores 404
+        # --- AQUÍ ESTÁ LA CLAVE ---
+        # He vuelto a poner EXACTAMENTE el modelo que usabas tú y que funcionaba.
         response = client.models.generate_content(
-            model='gemini-1.5-flash-001',
+            model='gemini-flash-latest',
             contents=prompt,
             config=types.GenerateContentConfig(response_mime_type='application/json')
         )
@@ -129,7 +129,6 @@ async def update_roster(request: Request, background_tasks: BackgroundTasks):
         return {"status": "error", "message": str(e)}
 
 # --- ENDPOINT 2: ENTREGAR DATOS (Hacia la Web) ---
-# Ahora requiere ?id=XXXXXX
 @app.get("/get-analysis")
 async def get_analysis(id: str = None):
     if not id:
