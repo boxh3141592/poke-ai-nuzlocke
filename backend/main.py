@@ -18,10 +18,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Base de datos en memoria
+# Base de datos en memoria (ID -> Datos)
 sessions_db = {} 
 
-# --- ENDPOINT ANTI-SUEÑO (Para UptimeRobot) ---
+# --- ENDPOINT ANTI-SUEÑO (KEEP ALIVE) ---
 @app.get("/")
 def keep_alive():
     return {"status": "online", "message": "GeminiLink backend is running!"}
@@ -37,12 +37,13 @@ def process_strategy_in_background(session_id: str, data: dict):
     box = data.get('box', [])
     inventory = data.get('inventory', [])
     
+    # Verificación de seguridad
     if not party and not box:
         sessions_db[session_id] = {
-            "analysis_summary": "⚠️ No se detectaron Pokémon. Asegúrate de tener al menos uno en el equipo.",
+            "analysis_summary": "⚠️ No se encontraron Pokémon. Asegúrate de tener al menos uno en el equipo o PC.",
             "team": []
         }
-        print("⚠️ Datos vacíos.")
+        print("⚠️ Datos vacíos recibidos.")
         return
 
     prompt = f"""
@@ -52,7 +53,7 @@ def process_strategy_in_background(session_id: str, data: dict):
     CAJA: {box}
 
     Diseña la mejor estrategia posible.
-    Responde SOLO en JSON:
+    Responde SOLO en JSON con este formato:
     {{
       "analysis_summary": "Consejo breve...",
       "team": [ 
@@ -62,27 +63,28 @@ def process_strategy_in_background(session_id: str, data: dict):
     """
 
     try:
-        # --- CORRECCIÓN AQUÍ ---
-        # Cambiamos 'gemini-1.5-flash' por 'gemini-1.5-flash-001' que es la versión estable exacta.
-        # Si este fallara, la alternativa es 'gemini-1.5-pro-latest'.
+        # --- CORRECCIÓN CRÍTICA AQUÍ ---
+        # Usamos la versión específica '-001' que es más estable y evita el error 404
         response = client.models.generate_content(
-            model='gemini-1.5-flash-001', 
+            model='gemini-1.5-flash-001',
             contents=prompt,
             config=types.GenerateContentConfig(response_mime_type='application/json')
         )
         
         new_analysis = json.loads(response.text)
+        
+        # Inyectar datos para el frontend
         new_analysis["raw_party_data"] = party
         new_analysis["inventory_data"] = inventory
         
         sessions_db[session_id] = new_analysis
-        print(f"✅ Estrategia lista: {session_id}")
+        print(f"✅ Estrategia generada con éxito para ID: {session_id}")
         
     except Exception as e:
-        print(f"❌ Error IA: {e}")
-        # Guardamos el error para verlo en el Frontend si pasa algo
-        sessions_db[session_id] = {"error": str(e)}
+        print(f"❌ Error CRÍTICO IA: {e}")
+        sessions_db[session_id] = {"error": f"Error de IA: {str(e)}"}
 
+# --- ENDPOINTS API ---
 @app.post("/update-roster")
 async def update_roster(request: Request, background_tasks: BackgroundTasks):
     try:
