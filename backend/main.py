@@ -5,11 +5,13 @@ import os
 from groq import Groq
 
 # --- CONFIGURACIÓN ---
+# Asegúrate de tener la variable GROQ_API_KEY en Render
 api_key = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=api_key)
 
 app = FastAPI()
 
+# Permisos CORS para que el Frontend (React) pueda hablar con el Backend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,25 +19,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Base de datos temporal en memoria RAM
 sessions_db = {} 
 
+# --- ENDPOINT 1: MANTENER VIVO ---
+# UptimeRobot llama a este link para que Render no se duerma
 @app.get("/")
 def keep_alive():
     return {"status": "online", "message": "Backend running with Groq Llama 3.3!"}
 
-# --- DIAGNÓSTICO PARA GROQ ---
-# Si vuelve a fallar, entra a /models para ver los nombres nuevos
+# --- ENDPOINT 2: DIAGNÓSTICO ---
+# Útil si Groq cambia nombres de modelos en el futuro. Entra a /models para ver la lista.
 @app.get("/models")
 def list_models():
     try:
-        # Groq también tiene una función para listar modelos
         models = client.models.list()
-        # Extraemos solo los IDs de los modelos
         nombres = [m.id for m in models.data]
         return {"available_models": nombres}
     except Exception as e:
         return {"error": str(e)}
 
+# --- LÓGICA DE IA (CEREBRO) ---
 def process_strategy_in_background(session_id: str, data: dict):
     global sessions_db
     print(f"🧠 Procesando sesión con Groq: {session_id}")
@@ -48,65 +52,66 @@ def process_strategy_in_background(session_id: str, data: dict):
     
     if not party and not box:
         sessions_db[session_id] = {
-            "analysis_summary": "⚠️ No se encontraron Pokémon.",
+            "analysis_summary": "⚠️ No se encontraron datos de Pokémon.",
             "team": []
         }
         return
 
- # ... (Imports y Configuración igual que antes) ...
-
+    # --- EL PROMPT MAESTRO (Aquí está la magia) ---
+    # Le explicamos a la IA cómo usar el 'move_pool' que envía tu script de Ruby.
     prompt = f"""
-    Eres el mejor entrenador Pokémon del mundo experto en Nuzlockes.
+    Eres el mejor entrenador Pokémon del mundo, experto en retos Nuzlocke.
     
-    Tengo un equipo Pokémon y necesito que optimices sus movimientos.
+    OBJETIVO:
+    Analiza mi equipo y construye la mejor estrategia de 6 Pokémon para sobrevivir.
     
-    DATOS RECIBIDOS:
-    1. EQUIPO ("party"): Lista de mis Pokémon. Cada uno tiene un campo "move_pool".
-    2. MOVE POOL: Es la lista de TODOS los ataques que ese Pokémon puede aprender (incluye los que ya tiene, los que olvidó y las MTs de mi mochila).
+    INFORMACIÓN CLAVE SOBRE LOS DATOS:
+    1. Recibirás una lista de Pokémon en "party".
+    2. Cada Pokémon tiene un campo llamado "move_pool".
+    3. "move_pool" contiene TODOS los ataques que ese Pokémon puede usar (incluye los que ya tiene, los que puede recordar por nivel y las MTs que tengo en la mochila).
     
-    TU MISIÓN:
-    Para CADA Pokémon del equipo, elige los 4 MEJORES movimientos posibles sacados de su "move_pool".
-    
-    REGLAS:
-    - NO te limites a los ataques que ya tiene. Revisa todo el "move_pool".
-    - Si encuentras un ataque en el "move_pool" que es mejor que uno actual (ej: tiene Lanzallamas en pool pero Arañazo equipado), ¡Dímelo!
-    - Explica en "reason" qué cambios hiciste (ej: "Sustituí Arañazo por Lanzallamas porque tienes la MT").
+    INSTRUCCIONES OBLIGATORIAS:
+    - NO te limites a los 4 ataques que el Pokémon tiene equipados actualmente.
+    - REVISA el "move_pool" de cada Pokémon. Si ves un ataque mejor ahí (por potencia, cobertura o utilidad), ¡Sugiérelo!
+    - Si sugieres un ataque que el Pokémon no tiene equipado, explícalo en la "reason" (ej: "Enseña Rayo Hielo usando tu MT").
+    - Elige una Habilidad y un Objeto basándote en los datos recibidos.
 
-    Responde SOLO JSON válido:
+    DATOS DEL JUEGO:
+    EQUIPO ACTUAL: {json.dumps(party)}
+    INVENTARIO: {inventory}
+    CAJA: {box}
+
+    FORMATO DE RESPUESTA (JSON PURO):
+    Responde SOLO y EXCLUSIVAMENTE con un JSON válido. No añadas texto antes ni después.
     {{
-      "analysis_summary": "Resumen general del estado del equipo...",
+      "analysis_summary": "Resumen estratégico general (ej: 'Tu equipo es fuerte en ataque especial pero débil a Tierra. Te recomiendo...')",
       "team": [ 
         {{ 
            "species": "Nombre", 
-           "role": "Atacante Físico / Tanque / etc", 
+           "role": "Rol (ej: Muralla Física, Sweeper Especial)", 
            "ability": "Nombre Habilidad", 
            "item_suggestion": "Objeto sugerido", 
            "moves": ["Ataque 1", "Ataque 2", "Ataque 3", "Ataque 4"], 
-           "reason": "Explica la estrategia y si cambiaste ataques usando el move_pool." 
+           "reason": "Explica por qué elegiste este set y si debe aprender movimientos nuevos del pool." 
         }} 
       ]
     }}
-    
-    AQUÍ ESTÁN LOS DATOS RAW DEL JUEGO:
-    {json.dumps(party)}
     """
 
     try:
+        # Llamada a Groq (Llama 3.3)
         chat_completion = client.chat.completions.create(
             messages=[
                 {
                     "role": "system",
-                    "content": "Eres un asistente que solo habla en JSON válido."
+                    "content": "Eres un asistente estratégico que solo responde en JSON válido."
                 },
                 {
                     "role": "user",
                     "content": prompt,
                 }
             ],
-            # --- CAMBIO IMPORTANTE: MODELO ACTUALIZADO ---
-            # Usamos la versión 3.3 Versatile, que es la actual.
-            # Si en el futuro falla, revisa /models
-            model="llama-3.3-70b-versatile", 
+            model="llama-3.3-70b-versatile", # Modelo potente y actual
             temperature=0.5,
             response_format={"type": "json_object"}, 
         )
@@ -114,6 +119,7 @@ def process_strategy_in_background(session_id: str, data: dict):
         response_content = chat_completion.choices[0].message.content
         new_analysis = json.loads(response_content)
         
+        # Guardamos datos crudos para que el Frontend pueda mostrar detalles al pasar el mouse
         new_analysis["raw_party_data"] = party
         new_analysis["inventory_data"] = inventory
         
@@ -124,6 +130,7 @@ def process_strategy_in_background(session_id: str, data: dict):
         print(f"❌ Error Groq: {e}")
         sessions_db[session_id] = {"error": f"Error técnico: {str(e)}"}
 
+# --- ENDPOINT 3: RECIBIR DATOS DEL JUEGO ---
 @app.post("/update-roster")
 async def update_roster(request: Request, background_tasks: BackgroundTasks):
     try:
@@ -131,13 +138,20 @@ async def update_roster(request: Request, background_tasks: BackgroundTasks):
         session_id = payload.get("session_id")
         team_data = payload.get("team")
         
-        if not session_id: return {"status": "error", "message": "No ID"}
+        # Generamos una ID si el juego no manda una (aunque tu juego debería mandarla)
+        if not session_id: 
+            import uuid
+            session_id = str(uuid.uuid4())[:8]
 
+        # Lanzamos el análisis en segundo plano para responder rápido al juego
         background_tasks.add_task(process_strategy_in_background, session_id, team_data)
+        
+        # El juego recibe esto y sabe que el proceso comenzó
         return {"status": "queued", "id": session_id}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+# --- ENDPOINT 4: ENTREGAR RESULTADOS A LA WEB ---
 @app.get("/get-analysis")
 async def get_analysis(id: str = None):
     if not id: return {"error": "Falta ID"}
